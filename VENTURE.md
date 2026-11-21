@@ -1,13 +1,13 @@
 ---
 slug: group-wrapped
-stage: idea
+stage: launched
 priority: 4
-url:
-repo:
+url: https://pb-group-wrapped.jan-bef.workers.dev
+repo: https://github.com/janwan2003/group-wrapped
 updated: 2026-11-21
 ---
 
-# group-wrapped
+# group-wrapped (product name: Crewcap)
 
 ## Thesis
 
@@ -89,11 +89,20 @@ Searches run 2026-11-21. Sources are search-result summaries, not opened pages, 
   recap templates ([CapCut](https://www.capcut.com/explore/2025-wrapped)), or a printed friendship
   yearbook ([Mixbook example](https://www.mixbook.com/inspiration/luan-nguyen-custom-friendship-yearbook)).
   One person does all the work, and nobody else contributes.
+- **Checked 2026-11-21 (builder, search-result summaries):** Spotify's own "Wrapped Party" (Dec 2025) is the nearest
+  rival: a host invites up to 9 friends by link or code and they compete for awards, but the awards are listening stats only
+  and it runs inside the Spotify app ([Spotify newsroom](https://newsroom.spotify.com/2025-12-03/wrapped-party-how-to/),
+  [TechCrunch](https://techcrunch.com/2025/12/03/spotifys-2025-wrapped-becomes-a-multiplayer-experience)). "Friend Wrapped"
+  ([App Store](https://apps.apple.com/us/app/-/id6475646063)) is an install-first anonymous friend-poll app with a paid tier.
+  Neither is a no-install recap the group writes itself, so the gap holds. Spotify adding a multiplayer mode is also a demand
+  signal: groups want to compare and award each other.
 - **Gap:** I found no search-volume figure for "friend group wrapped" and no trend by that exact name;
   the demand evidence is the format's size and the hand-made versions.
 
 ## Our edge
 
+- **Name:** Crewcap (original; no app by that name in search results 2026-11-21). The word "Wrapped" is Spotify's campaign
+  name, so it is not used as the product name; pages say "year in review" and "recap".
 - **Loop: needs others.**
 - **K estimate ≈ 1.6** = 8 invited per group × 65% who answer (the personal slide about *you* is a strong
   pull) × 30% who start one for another group. Reason: in December each person has 3–5 groups, and the
@@ -110,17 +119,76 @@ Searches run 2026-11-21. Sources are search-result summaries, not opened pages, 
 
 ## Status
 
-Idea only. Nothing built. Evidence above from web search on 2026-11-21.
+**Live: https://pb-group-wrapped.jan-bef.workers.dev** · product/privacy/support page: https://janwan2003.github.io/group-wrapped/
+(GitHub Pages from `docs/`) · Search Console: verified (META) and sitemap submitted 2026-11-21 (`scripts/gsc.py`).
+
+Served on workers.dev, like the other 2026-11-21 launches: the account is at the free plan's 10 D1 databases (inbox note from
+answer-battle), so each recap is its own SQLite-backed Durable Object (`Recap`, keyed by 8-character id) behind Worker
+`pb-group-wrapped`. Per-IP hourly limits live in a `Limiter` Durable Object: 20 creates, 40 joins and 600 other writes per hour;
+reads are capped at 120 a minute per IP per recap (in memory). An open recap page polls every 15 s while visible.
+
+What exists (all verified by the e2e test below unless marked):
+- Landing (`/`): create form. The kind is year, trip, team season or one big night, and it sets the title and award wording. Title,
+  your name, other names (optional; others can add themselves), 16 preset awards (6 ticked by default, 3–10 allowed), and the drop:
+  "when everyone has answered" or a date (drops at noon local time). Three example slides drawn by the real slide code. How it
+  works, use cases, FAQ.
+- Recap page (`/r/<id>`): a join screen where you tap your name or add yourself (duplicates rejected, claimed names disappear).
+  Then the answer form: one card per award with chips for every other member (no self-votes), rate 1–10, word, quote and moment.
+  Each tap autosaves, texts save on blur or after 1.2 s, and you can change answers until the drop. An invite box (share sheet on
+  phones, copy on desktop) shows who has answered. A personal link (`#k=<token>`) opens your answers on another device, and the
+  token is removed from the address bar after load.
+- The creator also gets "Drop the story now" (enabled once 2 have answered, and it waits for the creator's own unsaved answers),
+  can remove names nobody claimed, and can delete the recap.
+- The drop happens when every name on the list has answered (if 3+ people and no date), on the date, or by the creator's button.
+- Story: up to 15 canvas slides at 1080×1920. Cover, the year's rating with a histogram, one slide per award (ties, unanimous,
+  "also nominated"), the vote that split the group, word of the year, quotes, best moments, **your slide** ("Tom, the group
+  says you're… MVP · 2 votes of 4"), the cast, and an outro "Got another group? Make their recap". There is a full-screen viewer
+  (tap zones, progress bars, 6.5 s auto-advance, hold to pause, arrow keys and Escape), a thumbnail grid, and "Save this slide".
+  Save opens the share sheet with the PNG on phones and downloads it on desktop. After the story come buttons to start another
+  recap: another group, a trip, a team season.
+- Privacy by design: the API never returns other members' answers before the drop. After the drop it returns only totals and
+  anonymous texts; who voted for whom is never exposed (unit test checks the compiled story has no member ids of voters).
+- Link preview (`/r/<id>`): open "Our 2026 · our recap, voted by us" / "3 of 5 have answered · drops when everyone has
+  answered…"; dropped "Our 2026 · the story is out" / "Told by 4 of you. 🏆 MVP: Tom. Tap to watch…". Static og.png.
+- Durable Object alarm deletes each recap 180 days after creation. CSP and security headers (`public/_headers`), privacy, about,
+  404, robots (disallows `/r/`), sitemap, icons, manifest.
+
+Verified 2026-11-21:
+- `node --test tests/unit/*.test.js`: 10/10 pass. They cover: browser/server award lists match, recap/name/answer validation,
+  merging partial answers, completeness, status, compile (winners, ties, unanimous, biggest split, rating avg/histogram, word
+  normalising, deterministic quote order, personal titles, no voter ids), labels and drop text.
+- `tests/e2e/run.mjs` in real Chromium (Maya desktop 1280 px; Tom, Ann, Ben, Cat phones 390 px; Tom on a second desktop):
+  **PASS locally (`wrangler dev`) and on production deploy 3bf9a474.** Deploy 48802d8d only added the Search Console meta tag
+  (checked by curl). The run covers: validation, kind switch relabelling awards, HTML shown as text, join by name, no
+  self-vote, vote change, autosave, duplicate nickname, API secrecy before the drop, 403s for non-owners, link previews (open,
+  3 answered, dropped, deleted), drop, 13 slides with the expected winners/tie/word/rating, viewer through every slide, saved
+  PNG is 1080×1920, phone tap-through to the personal slide, answers closed after drop (409), personal link on a second
+  device, auto-drop when the last of 3 answers, delete → 404 everywhere, static pages, "make another" link prefill. Zero
+  unexpected console errors (3 expected 404/409 logs from deliberate rejections). The test deletes its recaps.
+- The first production run failed and found a real race: the creator could tap "Drop" before their own last answers saved.
+  Fixed (drop waits for pending saves) and re-run: PASS. That failed run left one test recap on production (it will be
+  auto-deleted after 180 days).
+- Screenshots looked at: landing desktop and phone, join phone, answer form phone, story page phone, viewer slides (cover,
+  award tie, personal slide), og.png.
+- Not covered: the reveal date passing by itself in a browser (unit-tested via `status()`), auto-advance timing (disabled
+  under automation), the phone share sheet (headless has none; the download path ran), iOS Safari, WhatsApp/Instagram in-app
+  browsers, real link-preview rendering, rate limits being hit, emoji rendering on iOS/Android canvases.
+
+## Metrics
+
+- 2026-11-21: launched today; 0 real recaps (test recaps only). Source: the e2e runs; there is no counting endpoint yet.
 
 ## Next steps
 
-1. Decide go/no-go for December 2026 with the operator: it needs to be live by ~2026-12-05.
-2. Write the prompt set (10 award prompts, quote, word, best-night list, one number guess) and design the
-   10 slides at 1080×1920; slides are the product.
-3. Build on Cloudflare Pages + Functions + D1 (`pb-group-wrapped`); render slides client-side to PNG
-   (no R2 needed); dynamic OG preview with answer count and drop date.
-4. Playwright end-to-end test: create → 4 members answer → drop → slides render and download.
-5. Add "Trip Wrapped" and "Season Wrapped" templates for the rest of the year.
+1. **Seasonal deadline: December is the whole game.** Seed it before Spotify Wrapped lands in early December. Operator ask in
+   the inbox: start one real recap for a real group.
+2. Counting for `## Metrics` without personal data: a tiny `Stats` Durable Object incremented on create, join and drop
+   (counts only), read by a script, so weekly creators/joiners can be recorded.
+3. Quality session: test in the WhatsApp/Instagram in-app browsers (the token is in localStorage; check it survives), check
+   emoji on Android canvases, add an e2e for the date drop with a short reveal time.
+4. Per-recap dynamic OG image (title + "x of y answered" on a slide-style card) to make previews pop in the chat.
+5. Optional: a "summary card" (1080×1350) with all winners on one image for the group chat, and creator moderation (hide a
+   quote or moment after the drop).
 
 ## Monetization plan
 
@@ -131,3 +199,8 @@ the operator can take money.
 
 - 2026-11-21 scout: created from scouting session; evidence from web search (search-result summaries,
   pages not opened). Not built.
+- 2026-11-21 builder: sanity-checked the evidence (new: Spotify's own 2025 "Wrapped Party" covers listening stats only, in-app;
+  gap holds), named it Crewcap, built and launched it. It is a Worker + Durable Objects app with canvas story slides, a
+  landing page, privacy/about/404 pages, Search Console verified with the sitemap submitted, and a GitHub Pages product page.
+  Unit 10/10; e2e PASS locally and on production deploy 3bf9a474, after fixing the drop-before-save race found by the first
+  production run.
