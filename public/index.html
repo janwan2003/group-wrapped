@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crewcap · Your friend group’s year in review, voted by the group</title>
+<meta name="description" content="Make a year-in-review story for your friend group. Everyone votes the awards (MVP, main character, always late), adds the quote and word of the year, and the recap drops for all of you at once. Free, no app, no sign-up.">
+<meta name="google-site-verification" content="E5DqnLJA_s_0vDF_tH9irMHn6LYxN-jg28IQng7LaKc" />
+<meta name="theme-color" content="#16122b">
+<link rel="canonical" href="https://pb-group-wrapped.jan-bef.workers.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Crewcap">
+<meta property="og:title" content="Crewcap · your group’s year, voted by your group">
+<meta property="og:description" content="One link in the group chat. Everyone votes the awards, the recap drops for all of you at once. No app, no sign-up.">
+<meta property="og:image" content="https://pb-group-wrapped.jan-bef.workers.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/app.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Crewcap","url":"https://pb-group-wrapped.jan-bef.workers.dev/","applicationCategory":"EntertainmentApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0"},"description":"A year-in-review story for your friend group, voted by the group. No app, no sign-up."}</script>
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="/"><span data-logo></span>Crewcap</a>
+  <nav><a href="#how">How it works</a><a href="#faq">FAQ</a></nav>
+</header>
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <span class="kicker">Your group’s year in review</span>
+      <h1>The recap your friends <span class="hl">vote on</span>.</h1>
+      <p class="lede">Send one link to the group chat. Everyone votes the awards (MVP, main character, always late), adds the quote and the word of the year, and on reveal day the story drops for all of you at once.</p>
+      <ul class="ticks">
+        <li>About 2 minutes each, mostly taps</li>
+        <li>No app, no account, no chat upload</li>
+        <li>Story slides made for screenshots, plus one about you</li>
+      </ul>
+      <a class="btn violet phone-only" href="#f-new" style="margin-top:18px">Start your group’s recap</a>
+      <div class="peek" id="peek" aria-label="Example story slides"></div>
+    </div>
+    <form class="panel" id="f-new" novalidate>
+      <h2 id="new-h">Start your group’s recap</h2>
+      <p id="again" class="muted small" hidden>Another group, another recap. Your last one is safe; this starts a new link.</p>
+      <span class="lbl">What is it for?</span>
+      <div class="seg" id="kinds" role="radiogroup" aria-label="What is it for">
+        <button type="button" class="chip" role="radio" data-kind="year" aria-checked="true">The year</button>
+        <button type="button" class="chip" role="radio" data-kind="trip" aria-checked="false">A trip</button>
+        <button type="button" class="chip" role="radio" data-kind="season" aria-checked="false">A team season</button>
+        <button type="button" class="chip" role="radio" data-kind="event" aria-checked="false">One big night</button>
+      </div>
+      <label for="t-title">Title <span class="count" id="t-title-c"></span></label>
+      <input type="text" id="t-title" maxlength="40" autocomplete="off" placeholder="Our 2026">
+      <div class="row">
+        <div>
+          <label for="t-me">Your name</label>
+          <input type="text" id="t-me" maxlength="20" autocomplete="given-name" placeholder="e.g. Maya">
+        </div>
+        <div>
+          <label for="t-names">Everyone else <span class="hint">(optional)</span></label>
+          <textarea id="t-names" rows="2" placeholder="Tom, Ann, Ben, Cat"></textarea>
+        </div>
+      </div>
+      <p class="muted small" style="margin:6px 0 0">Comma or one per line. Friends who aren’t listed can add themselves.</p>
+      <span class="lbl">Awards <span class="hint" id="aw-count"></span></span>
+      <div class="awardpick" id="awards"></div>
+      <span class="lbl">When does the story drop?</span>
+      <div class="seg" id="drop" role="radiogroup" aria-label="When does the story drop">
+        <button type="button" class="chip" role="radio" data-drop="all" aria-checked="true">When everyone has answered</button>
+        <button type="button" class="chip" role="radio" data-drop="date" aria-checked="false">On a date</button>
+      </div>
+      <div id="date-row" hidden>
+        <label for="t-date">Reveal day <span class="hint">(drops at noon)</span></label>
+        <input type="date" id="t-date">
+      </div>
+      <p class="muted small" style="margin:8px 0 0">You can always drop it early once 2 people have answered.</p>
+      <p class="err" id="new-err" role="alert"></p>
+      <button class="btn violet block" type="submit">Create our recap</button>
+    </form>
+  </div>
+
+  <section class="block" id="how">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step"><h3>Start it and share the link</h3><p>Pick the awards and list the group. Paste the link in the group chat; the preview shows how many have answered and when it drops.</p></div>
+      <div class="step"><h3>Everyone answers in secret</h3><p>Friends tap their name and vote for each award, rate the year, and add a quote, a word and a best moment. Nobody sees anything until the drop.</p></div>
+      <div class="step"><h3>The story drops for everyone</h3><p>Full-screen slides: every award, the vote that split the group, the word and quotes of the year, and a slide about each of you. Save any slide for your story.</p></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Not just for New Year</h2>
+    <div class="uses">
+      <div class="use"><b>Friend group</b><span class="muted">Our 2026, the uni crew, the cousins.</span></div>
+      <div class="use"><b>Trip</b><span class="muted">Lisbon 2026: who got lost, who planned it all.</span></div>
+      <div class="use"><b>Team season</b><span class="muted">Sunday league, the office, the choir.</span></div>
+      <div class="use"><b>One big night</b><span class="muted">A wedding, a birthday, a reunion.</span></div>
+    </div>
+  </section>
+
+  <section class="block" id="faq">
+    <h2>Questions</h2>
+    <details><summary>Does anyone need to sign up or install an app?</summary><p>No. The link opens in any phone browser, including the one inside WhatsApp, Instagram or iMessage. You tap your name and answer. Your phone remembers you for that recap.</p></details>
+    <details><summary>Can people see who voted for them?</summary><p>No. The story only shows totals (“5 of 8 votes”). Quotes, words and moments are shown without names. Nobody, including the person who started it, can see who voted for whom.</p></details>
+    <details><summary>Do you read our group chat?</summary><p>No. Crewcap never asks for a chat export. The story is made only from what each of you types in.</p></details>
+    <details><summary>When does the story drop?</summary><p>Either the moment everyone on the list has answered, or on the reveal day you pick. The person who started it can also drop it early once 2 people have answered.</p></details>
+    <details><summary>What if I open it on another phone?</summary><p>After you answer you get a personal link. Open it on your other phone or laptop and you’re still you.</p></details>
+    <details><summary>How long is it kept?</summary><p>Each recap is deleted automatically 180 days after it was made. The person who started it can delete it any time.</p></details>
+    <details><summary>Is it free?</summary><p>Yes, with no ads and no sign-up.</p></details>
+  </section>
+</main>
+<footer class="foot"><div class="wrap"><span>Crewcap · your group’s year, voted by your group</span><span><a href="/about">About</a> · <a href="/privacy">Privacy</a></span></div></footer>
+<script type="module" src="/home.js"></script>
+</body>
+</html>

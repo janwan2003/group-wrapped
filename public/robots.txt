@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /r/
+Disallow: /api/
+Sitemap: https://pb-group-wrapped.jan-bef.workers.dev/sitemap.xml

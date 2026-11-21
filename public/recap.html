@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--META-->
+<meta name="theme-color" content="#16122b">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="/"><span data-logo></span>Crewcap</a>
+  <nav><a href="/?again=1">Start your own</a></nav>
+</header>
+<main class="narrow" id="app" aria-live="polite"><p class="muted">Loading…</p></main>
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Recap story">
+  <div class="stage">
+    <div class="bars" id="bars"></div>
+    <canvas id="slide" role="img"></canvas>
+    <button class="tap prev" id="v-prev" aria-label="Previous slide"></button>
+    <button class="tap next" id="v-next" aria-label="Next slide"></button>
+    <button class="vclose" id="v-close" aria-label="Close story">×</button>
+    <div class="vbtns"><button class="btn small" id="v-save">Save this slide</button><button class="btn small" id="v-share">Share the link</button></div>
+  </div>
+</div>
+<footer class="foot"><div class="wrap"><span>Crewcap · your group’s year, voted by your group</span><span><a href="/about">About</a> · <a href="/privacy">Privacy</a></span></div></footer>
+<script type="module" src="/recap.js"></script>
+</body>
+</html>
