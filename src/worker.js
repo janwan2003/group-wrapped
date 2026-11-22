@@ -26,6 +26,15 @@ function randomId(n, alphabet = 'abcdefghijkmnpqrstuvwxyz23456789') {
   const bytes = crypto.getRandomValues(new Uint8Array(n));
   return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
 }
+// Daily aggregate counts for the Metrics section: recaps created, people joined, people who finished, stories dropped.
+// Counts only; nothing about who.
+const STAT_FIELDS = ['created', 'joined', 'answered', 'dropped'];
+async function bump(env, field) {
+  try {
+    const stub = env.STATS.get(env.STATS.idFromName('global'));
+    await stub.fetch(`https://stats/bump?f=${field}`, { method: 'POST' });
+  } catch (e) { console.error(e); }
+}
 const validToken = (t) => typeof t === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(t);
 
 export class Recap extends DurableObject {
@@ -52,6 +61,8 @@ export class Recap extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
   async alarm() { await this.wipe(); }
+  // Automated test traffic (x-e2e header) is not counted in the stats.
+  async bump(field) { if (!this.e2e) await bump(this.env, field); }
 
   counts(r, members, answers) {
     const done = new Set(answers.filter((a) => isComplete(a, r.awards, members.length - 1)).map((a) => a.member_id));
@@ -111,6 +122,7 @@ export class Recap extends DurableObject {
     const now = Date.now();
     const ip = request.headers.get('x-ip') || '';
     const tok = request.headers.get('x-token');
+    this.e2e = request.headers.get('x-e2e') === '1';
     const tokHash = validToken(tok) ? await sha(tok) : null;
     const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
 
@@ -125,6 +137,8 @@ export class Recap extends DurableObject {
         body.id, r.title, r.kind, JSON.stringify(r.awards), tokHash, r.dropAt, now);
       r.names.forEach((n, i) => this.sql.exec('INSERT INTO members (name, tok, joined) VALUES (?, ?, ?)', n, i === 0 ? tokHash : null, i === 0 ? now : null));
       await this.ctx.storage.setAlarm(now + KEEP_DAYS * 86400e3);
+      await this.bump('created');
+      await this.bump('joined');
       return json({ id: body.id });
     }
 
@@ -156,6 +170,7 @@ export class Recap extends DurableObject {
           if (!v.ok) return fail(v.error, 409);
           this.sql.exec('INSERT INTO members (name, tok, joined) VALUES (?, ?, ?)', v.value, tokHash, now);
         }
+        await this.bump('joined');
         break;
       }
       case 'answer': {
@@ -164,13 +179,19 @@ export class Recap extends DurableObject {
         const v = validateAnswer(body, { awards: r.awards, memberIds: members.map((m) => m.id), selfId: me.id });
         if (!v.ok) return fail(v.error);
         const prev = this.sql.exec('SELECT data FROM answers WHERE member_id = ?', me.id).toArray()[0];
-        const merged = mergeAnswer(prev ? JSON.parse(prev.data) : null, v.value);
+        const before = prev ? JSON.parse(prev.data) : null;
+        const merged = mergeAnswer(before, v.value);
+        const others = members.length - 1;
+        if (isComplete(merged, r.awards, others) && !(before && isComplete(before, r.awards, others))) await this.bump('answered');
         this.sql.exec('INSERT INTO answers (member_id, data, updated) VALUES (?, ?, ?) ON CONFLICT (member_id) DO UPDATE SET data = excluded.data, updated = excluded.updated',
           me.id, JSON.stringify(merged), now);
         // With no reveal date, the story drops the moment the last person on the list has answered.
         if (!r.drop_at && members.length >= 3 && members.every((m) => m.tok)) {
           const { answered, total } = this.counts(r, members, this.answers());
-          if (answered === total) this.sql.exec('UPDATE recap SET dropped_at = ? WHERE k = 1', now);
+          if (answered === total) {
+            this.sql.exec('UPDATE recap SET dropped_at = ? WHERE k = 1', now);
+            await this.bump('dropped');
+          }
         }
         break;
       }
@@ -190,6 +211,7 @@ export class Recap extends DurableObject {
         const { answered } = this.counts(r, members, this.answers());
         if (answered < MIN_TO_DROP) return fail(`Wait until at least ${MIN_TO_DROP} people have answered.`, 409);
         this.sql.exec('UPDATE recap SET dropped_at = ? WHERE k = 1', now);
+        await this.bump('dropped');
         break;
       }
       case 'delete': {
@@ -225,6 +247,27 @@ export class Limiter extends DurableObject {
   async alarm() { await this.ctx.storage.deleteAll(); }
 }
 
+export class Stats extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS days (day TEXT PRIMARY KEY, ${STAT_FIELDS.map((f) => `${f} INTEGER DEFAULT 0`).join(', ')})`);
+  }
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/bump') {
+      const f = url.searchParams.get('f');
+      if (!STAT_FIELDS.includes(f)) return fail('bad field');
+      const day = new Date().toISOString().slice(0, 10);
+      this.sql.exec(`INSERT INTO days (day, ${f}) VALUES (?, 1) ON CONFLICT (day) DO UPDATE SET ${f} = ${f} + 1`, day);
+      return json({ ok: true });
+    }
+    const days = this.sql.exec('SELECT * FROM days ORDER BY day DESC LIMIT 400').toArray();
+    const totals = Object.fromEntries(STAT_FIELDS.map((f) => [f, days.reduce((n, d) => n + d[f], 0)]));
+    return json({ since: days.length ? days[days.length - 1].day : null, totals, days });
+  }
+}
+
 const LIMITS = { create: 20, join: 40, write: 600 };
 
 async function allowed(env, ip, kind) {
@@ -244,9 +287,13 @@ const ID = /^[a-z2-9]{8}$/;
 async function api(request, env, url) {
   const ip = request.headers.get('cf-connecting-ip') || '';
   const parts = url.pathname.split('/').filter(Boolean); // api, r, id?, action?
+  if (parts[1] === 'stats' && parts.length === 2 && request.method === 'GET') {
+    return env.STATS.get(env.STATS.idFromName('global')).fetch('https://stats/');
+  }
   if (parts[1] !== 'r') return fail('Not found.', 404);
   const headers = new Headers({ 'x-ip': ip });
   if (request.headers.get('x-token')) headers.set('x-token', request.headers.get('x-token'));
+  if (request.headers.get('x-e2e') === '1') headers.set('x-e2e', '1');
 
   if (parts.length === 2 && request.method === 'POST') {
     if (!(await allowed(env, ip, 'create'))) return fail('You’ve started a lot of recaps this hour. Try again later.', 429);

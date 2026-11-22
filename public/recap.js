@@ -95,6 +95,11 @@ function renderJoin(d) {
 }
 
 // ---------- Answer ----------
+const mineLabel = (d) => {
+  const n = d.awards.length + 4;
+  const got = Math.round(d.me.progress * n);
+  return got >= n ? 'Your answers: all done' : `Your answers: ${got} of ${n}`;
+};
 function renderAnswer(d) {
   const a = d.me.answer || { awards: {} };
   const others = d.members.filter((m) => m.id !== d.me.id);
@@ -108,7 +113,7 @@ function renderAnswer(d) {
   app.innerHTML = `${header(d)}
     ${!d.me.complete ? inviteBox(d, false) : ''}
     <p class="muted">Hi <b>${esc(d.me.name)}</b>. Your answers are secret and save as you go. Change them any time before the drop.</p>
-    <div class="meter" aria-label="Your progress"><i id="mine" style="width:${Math.round(d.me.progress * 100)}%"></i></div>
+    <div class="mymeter"><span class="lbl" id="mine-l">${mineLabel(d)}</span><div class="meter mine" aria-hidden="true"><i id="mine" style="width:${Math.round(d.me.progress * 100)}%"></i></div></div>
     <h2 style="margin-top:22px">The awards</h2>
     ${awardCards}
     <h2 style="margin-top:26px">The ${noun}</h2>
@@ -117,15 +122,15 @@ function renderAnswer(d) {
       <div class="rate">${Array.from({ length: 10 }, (_, i) => `<button class="chip violet" type="button" data-rate="${i + 1}" aria-pressed="${a.rating === i + 1}">${i + 1}</button>`).join('')}</div>
     </div>
     <div class="q${a.word ? ' done' : ''}" data-text="word">
-      <h3><span class="em" aria-hidden="true">🔤</span><label for="a-word" style="margin:0">Word of the ${noun} <span class="hint">(one word)</span></label></h3>
+      <h3><span class="em" aria-hidden="true">🔤</span><label for="a-word">Word of the ${noun} <span class="hint">(one word)</span></label></h3>
       <input type="text" id="a-word" maxlength="24" autocomplete="off" placeholder="e.g. chaotic" value="${esc(a.word || '')}">
     </div>
     <div class="q${a.quote ? ' done' : ''}" data-text="quote">
-      <h3><span class="em" aria-hidden="true">💭</span><label for="a-quote" style="margin:0">Quote of the ${noun} <span class="count" id="a-quote-c"></span></label></h3>
+      <h3><span class="em" aria-hidden="true">💭</span><label for="a-quote">Quote of the ${noun}</label><span class="count" id="a-quote-c"></span></h3>
       <textarea id="a-quote" maxlength="140" rows="2" placeholder="The thing someone said that we still repeat">${esc(a.quote || '')}</textarea>
     </div>
     <div class="q${a.moment ? ' done' : ''}" data-text="moment">
-      <h3><span class="em" aria-hidden="true">🎞️</span><label for="a-moment" style="margin:0">Best moment <span class="count" id="a-moment-c"></span></label></h3>
+      <h3><span class="em" aria-hidden="true">🎞️</span><label for="a-moment">Best moment</label><span class="count" id="a-moment-c"></span></h3>
       <textarea id="a-moment" maxlength="120" rows="2" placeholder="That night, that trip, that one dinner…">${esc(a.moment || '')}</textarea>
     </div>
     <p class="muted small">Quotes, words and moments are shown without your name. Keep them kind: everyone in the group will see them.</p>
@@ -185,24 +190,48 @@ function drawDone(d) {
   bindInvite();
 }
 
+// Saves run one at a time. If the network drops (or the server is busy), unsaved edits are merged and retried,
+// so a tap on a flaky phone connection is never silently lost.
 let saving = Promise.resolve();
+let pending = null;
+let retryTimer = null;
+const mergePatch = (a, b) => {
+  const m = { ...a, ...b };
+  if (a?.awards || b?.awards) m.awards = { ...a?.awards, ...b?.awards };
+  return m;
+};
 function save(patch) {
-  saving = saving.then(async () => {
-    try {
-      const d = await call('answer', patch);
-      $('#a-err').textContent = '';
-      const wasComplete = data.me?.complete;
-      data = d;
-      if (d.status !== 'open') { show(d); return; }
-      $('#mine').style.width = `${Math.round(d.me.progress * 100)}%`;
-      updateCounts(d);
-      if (d.me.complete && !wasComplete) { drawDone(d); toast('All your awards are in!'); }
-    } catch (e) {
-      $('#a-err').textContent = e.message;
-      if (e.status === 409) refresh();
-    }
-  });
+  pending = mergePatch(pending, patch);
+  saving = saving.then(flushPending);
 }
+async function flushPending() {
+  clearTimeout(retryTimer);
+  if (!pending) return;
+  const patch = pending;
+  pending = null;
+  try {
+    const d = await call('answer', patch);
+    $('#a-err').textContent = '';
+    const wasComplete = data.me?.complete;
+    data = d;
+    if (d.status !== 'open') { show(d); return; }
+    $('#mine').style.width = `${Math.round(d.me.progress * 100)}%`;
+    $('#mine-l').textContent = mineLabel(d);
+    updateCounts(d);
+    if (d.me.complete && !wasComplete) { drawDone(d); toast('All your awards are in!'); }
+  } catch (e) {
+    if (e.status === 0 || e.status === 429 || e.status >= 500) {
+      pending = mergePatch(patch, pending); // edits made meanwhile win
+      $('#a-err').textContent = e.status === 0 ? 'You’re offline. Your answers will save when you’re back.' : 'Not saved yet. Retrying…';
+      retryTimer = setTimeout(() => { saving = saving.then(flushPending); }, 4000);
+      return;
+    }
+    $('#a-err').textContent = e.message;
+    if (e.status === 409) refresh();
+  }
+}
+window.addEventListener('online', () => { if (pending) saving = saving.then(flushPending); });
+window.addEventListener('beforeunload', (e) => { if (pending) e.preventDefault(); });
 
 function ownerPanel(d) {
   const free = d.members.filter((m) => !m.claimed);
@@ -221,6 +250,7 @@ function bindOwner() {
     const left = data.total - data.answered;
     if (!confirm(left > 0 ? `${plural(left, 'person hasn’t', 'people haven’t')} answered yet. Drop the story for everyone now?` : 'Drop the story for everyone now?')) return;
     await saving; // your own last answers go in before the story is compiled
+    if (pending) { toast('Your last answers haven’t saved yet. Try again in a moment.'); return; }
     try { show(await call('drop', {})); } catch (e) { toast(e.message); }
   });
   $('#rm')?.addEventListener('click', async (e) => {
@@ -374,7 +404,7 @@ function show(d) {
   const next = d.status === 'dropped' ? 'story' : d.me ? `answer:${d.me.id}:${d.members.length}` : `join:${d.members.map((m) => `${m.id}${m.claimed ? 'c' : ''}`).join(',')}`;
   if (next === shape) { updateCounts(d); return; }
   // Keep the answer form in place while someone types; new joiners are added on the next full render.
-  if (shape.startsWith('answer:') && next.startsWith('answer:') && document.activeElement?.matches('input, textarea')) { updateCounts(d); return; }
+  if (shape.startsWith('answer:') && next.startsWith('answer:') && (pending || document.activeElement?.matches('input, textarea'))) { updateCounts(d); return; }
   shape = next;
   if (d.status === 'dropped') renderStory(d);
   else if (d.me) renderAnswer(d);

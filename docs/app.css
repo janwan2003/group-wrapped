@@ -59,6 +59,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--v
 .btn.ghost:hover { background: #f6efe4; }
 .btn.small { padding: 9px 13px; font-size: .9rem; border-radius: 11px; }
 .btn.danger { background: transparent; color: var(--danger); border: 1.5px solid #f0cdc9; }
+#aw-more { margin-top: 8px; }
 .linkbtn { border: 0; background: none; color: var(--violet); font: 650 .93rem var(--sans); cursor: pointer; padding: 4px 0; }
 .err { color: var(--danger); font-weight: 650; margin: 12px 0 0; min-height: 1.2em; }
 .muted { color: var(--muted); }
@@ -94,6 +95,13 @@ details p { margin: 10px 0 0; color: var(--ink-2); }
 .q { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px 16px 18px; margin: 12px 0; }
 .q h3 { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .q h3 .em { font-size: 1.5rem; }
+.q h3 label { margin: 0; font: inherit; }
+.q h3 .count { float: none; margin-left: auto; font-size: .8rem; font-weight: 500; letter-spacing: 0; }
+.q.done h3:has(.count)::after { margin-left: 8px; }
+.mymeter { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 14px 0 0; }
+.mymeter .lbl { margin: 0 0 6px; font-size: .88rem; }
+.meter.mine { margin: 0; height: 8px; }
+.meter.mine > i { background: var(--ok); }
 .q.done { border-color: #cfc6ff; }
 .q.done h3::after { content: "✓"; margin-left: auto; color: var(--ok); font-weight: 900; }
 .rate { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }

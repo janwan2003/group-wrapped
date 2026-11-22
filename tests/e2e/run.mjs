@@ -11,16 +11,19 @@ mkdirSync(SHOTS, { recursive: true });
 const browser = await launch();
 const errors = [];
 const expected = [];
+const LOCAL = /127\.0\.0\.1|localhost/.test(BASE);
+// x-e2e: test traffic is left out of the production usage counts (/api/stats).
+const E2E = { 'x-e2e': '1' };
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const DESK = { viewport: { width: 1280, height: 860 } };
 
 async function person(name, opts) {
-  const ctx = await browser.newContext({ ...opts, acceptDownloads: true });
+  const ctx = await browser.newContext({ ...opts, acceptDownloads: true, extraHTTPHeaders: E2E });
   const page = await ctx.newPage();
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
     // Chromium logs every non-2xx fetch; the deliberate rejections below cause 404/409 responses.
-    if (/Failed to load resource: .* (404|409) /.test(m.text())) { expected.push(`${name}: ${m.text()}`); return; }
+    if (/Failed to load resource: .* (404|409) |ERR_INTERNET_DISCONNECTED/.test(m.text())) { expected.push(`${name}: ${m.text()}`); return; }
     errors.push(`${name}: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
@@ -30,7 +33,7 @@ async function person(name, opts) {
 const step = (s) => console.log(`- ${s}`);
 const shot = (page, n, full = true) => page.screenshot({ path: `${SHOTS}${n}.png`, fullPage: full });
 async function og(path) {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { headers: E2E });
   const html = await res.text();
   return {
     status: res.status,
@@ -38,12 +41,19 @@ async function og(path) {
     desc: html.match(/property="og:description" content="([^"]*)"/)?.[1] ?? '',
   };
 }
+// No sideways scrolling on a small phone.
+async function noOverflow(page, label) {
+  const w = await page.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
+  assert.ok(w[0] <= w[1], `${label}: page is ${w[0]}px wide in a ${w[1]}px viewport`);
+}
 async function token(page, id) { return page.evaluate((k) => localStorage.getItem(`cc.tok.${k}`), id); }
 async function raw(path, tok, body) {
-  const res = await fetch(`${BASE}/api/${path}`, { method: body ? 'POST' : 'GET', headers: { 'x-token': tok, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`${BASE}/api/${path}`, { method: body ? 'POST' : 'GET', headers: { 'x-token': tok, 'content-type': 'application/json', ...E2E }, body: body ? JSON.stringify(body) : undefined });
   return { status: res.status, data: await res.json() };
 }
 
+const stats0 = await (await fetch(`${BASE}/api/stats`)).json();
+assert.ok(stats0.totals && typeof stats0.totals.created === 'number', 'GET /api/stats returns totals');
 const maya = await person('Maya', DESK);
 const tom = await person('Tom', PHONE);
 const ann = await person('Ann', PHONE);
@@ -55,6 +65,12 @@ await maya.page.goto(BASE);
 await maya.page.waitForSelector('#peek canvas');
 await shot(maya.page, '01-landing-desktop', false);
 assert.equal(await maya.page.inputValue('#t-title'), `Our ${new Date().getFullYear()}`);
+assert.equal(await maya.page.$$eval('#awards .chip', (els) => els.length), 8);
+assert.equal(await maya.page.textContent('#aw-more'), 'Show 8 more awards');
+await maya.page.click('#aw-more');
+assert.equal(await maya.page.$$eval('#awards .chip', (els) => els.length), 16);
+assert.ok(await maya.page.isHidden('#aw-more'));
+step('landing shows 8 awards, "Show 8 more awards" reveals all 16');
 await maya.page.click('#f-new button[type=submit]');
 await maya.page.waitForSelector('#new-err:has-text("Type your own name")');
 step('empty name shows a validation message');
@@ -107,6 +123,8 @@ await tom.page.fill('#a-quote', '“It’s only a 10 minute walk” — it was n
 await tom.page.fill('#a-moment', 'Missing the last train in Lisbon');
 await tom.page.locator('#a-moment').blur();
 await tom.page.waitForSelector('#donebox:has-text("Now get the others")');
+await tom.page.waitForSelector('#mine-l:text-is("Your answers: all done")');
+assert.equal(await tom.page.$eval('#mine', (e) => e.style.width), '100%');
 await shot(tom.page, '04-answered-phone');
 const tomTok = await token(tom.page, id);
 let r = await raw(`r/${id}`, tomTok);
@@ -144,6 +162,16 @@ async function answerAll(page, votes, rating, word, quote, moment) {
   await page.locator('#a-moment').blur();
   await page.waitForSelector('#donebox:has-text("Now get the others"), #donebox:has-text("All your awards")');
 }
+// Ann loses her connection mid-vote: the tap is kept and saved once she is back online.
+await ann.ctx.setOffline(true);
+await ann.page.click('[data-award="mvp"] [data-vote]:text-is("Tom")');
+await ann.page.waitForSelector('#a-err:has-text("offline")');
+await ann.ctx.setOffline(false);
+await ann.page.waitForSelector('#a-err:text-is("")', { state: 'attached', timeout: 15000 });
+await ann.page.waitForSelector('#mine-l:text-is("Your answers: 1 of 8")');
+r = await raw(`r/${id}`, await token(ann.page, id));
+assert.equal(r.data.me.answer.awards.mvp, r.data.members.find((m) => m.name === 'Tom').id);
+step('offline tap: "You’re offline" shown, then saved automatically when the connection came back');
 await answerAll(ann.page, { mvp: 'Maya', main: 'Maya', late: 'Ben', chat: 'Tom' }, 8, 'chaotic!', 'Who invited the goose?', 'Karaoke until 4am');
 await answerAll(cat.page, { mvp: 'Tom', main: 'Maya', late: 'Ben', chat: 'Ann' }, 7, 'Loud', '', 'The lake day');
 await shot(cat.page, '05-answer-form-phone');
@@ -211,6 +239,9 @@ await tom.page.reload();
 await tom.page.waitForSelector('#thumbs canvas');
 assert.match(await tom.page.textContent('.cover'), /one is about you/);
 await shot(tom.page, '08-story-phone');
+await tom.page.setViewportSize({ width: 320, height: 640 });
+await noOverflow(tom.page, 'story page at 320px');
+await tom.page.setViewportSize(PHONE.viewport);
 await tom.page.click('#watch');
 await tom.page.waitForSelector('#viewer:not([hidden])');
 await shot(tom.page, '09-viewer-cover-phone', false);
@@ -261,6 +292,26 @@ assert.equal(v.data.status, 'dropped');
 assert.equal(v.data.story.awards[0].label, 'MVP of the trip');
 step('auto-drop: the story dropped the moment the last of 3 answered; trip labels used');
 
+// 7b. A browser that blocks storage (some in-app browsers): you can still join and vote in that visit.
+const dee = await person('Dee', { ...PHONE, viewport: { width: 320, height: 640 } });
+await dee.ctx.addInitScript(() => {
+  Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
+});
+const c3 = await raw('r', t1, { kind: 'event', title: 'Ana’s wedding', me: 'Zed', names: ['Dee'], awards: ['mvp', 'main', 'late'] });
+await dee.page.goto(`${BASE}/r/${c3.data.id}`);
+await dee.page.waitForSelector('#names');
+await noOverflow(dee.page, 'join page at 320px');
+await dee.page.click('#names [data-id]:has-text("Dee")');
+await dee.page.waitForSelector('[data-award="mvp"] [data-vote]');
+await dee.page.click('[data-award="mvp"] [data-vote]:text-is("Zed")');
+await dee.page.waitForSelector('#mine-l:text-is("Your answers: 1 of 7")');
+assert.equal(await dee.page.textContent('#a-err'), '');
+await noOverflow(dee.page, 'answer page at 320px');
+v = await raw(`r/${c3.data.id}`, t1);
+assert.equal(v.data.members.find((m) => m.name === 'Dee').claimed, true);
+assert.equal((await raw(`r/${c3.data.id}/delete`, t1, {})).status, 200);
+step('storage blocked: Dee joined and her vote saved; no sideways scroll at 320px');
+
 // 8. Delete: page and API 404
 assert.equal((await raw(`r/${id2}/delete`, t1, {})).status, 200);
 await maya.page.click('#del');
@@ -279,12 +330,28 @@ assert.equal((await fetch(`${BASE}/nope`)).status, 404);
 await ann.page.goto(BASE);
 await ann.page.waitForSelector('#peek canvas');
 await shot(ann.page, '12-landing-phone');
+await ann.page.setViewportSize({ width: 320, height: 640 });
+await noOverflow(ann.page, 'landing at 320px');
+await ann.page.setViewportSize(PHONE.viewport);
 await ann.page.goto(`${BASE}/?again=1&kind=trip`);
 assert.equal(await ann.page.textContent('#new-h'), 'Make one for your other group');
 assert.equal(await ann.page.inputValue('#t-title'), 'The trip');
 await ann.page.goto(`${BASE}/privacy`);
 await shot(ann.page, '13-privacy-phone');
 step('static pages 200, unknown page 404; "make one for your other group" link pre-fills the trip template');
+
+// 10. Usage counts: test traffic is not counted; on a local server, real (unmarked) traffic is.
+const stats1 = await (await fetch(`${BASE}/api/stats`)).json();
+assert.deepEqual(stats1.totals, stats0.totals, 'e2e traffic must not change the usage counts');
+if (LOCAL) {
+  const real = await fetch(`${BASE}/api/r`, { method: 'POST', headers: { 'x-token': 'realTokenAaaaaaaaaaaaaaaa1', 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Count me', me: 'Kim', names: ['Lu'], awards: ['mvp', 'main', 'late'] }) });
+  const rid = (await real.json()).id;
+  const stats2 = await (await fetch(`${BASE}/api/stats`)).json();
+  assert.equal(stats2.totals.created, stats1.totals.created + 1);
+  assert.equal(stats2.totals.joined, stats1.totals.joined + 1);
+  assert.equal((await raw(`r/${rid}/delete`, 'realTokenAaaaaaaaaaaaaaaa1', {})).status, 200);
+  step('stats: an unmarked create counts 1 created + 1 joined; e2e traffic left the totals unchanged');
+} else step('stats: e2e traffic left the production totals unchanged');
 
 await browser.close();
 if (expected.length) console.log(`(${expected.length} expected 404/409 network logs from deliberate rejections)`);

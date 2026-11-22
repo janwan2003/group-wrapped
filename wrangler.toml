@@ -19,9 +19,17 @@ class_name = "Recap"
 name = "LIMITER"
 class_name = "Limiter"
 
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Recap", "Limiter"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Stats"]
 
 [observability]
 enabled = false

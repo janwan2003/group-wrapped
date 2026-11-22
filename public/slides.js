@@ -38,7 +38,8 @@ function background(ctx, p, seed = 0) {
   ctx.globalAlpha = 0.22;
   ctx.strokeStyle = p.ink;
   ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.arc(W - x2 * 0.6, H - y1 * 0.5, 120, 0, Math.PI * 2); ctx.stroke();
+  // The ring sits in the bottom-right corner, half off the slide, so it never crosses names or numbers.
+  ctx.beginPath(); ctx.arc(W - 40 - (seed % 3) * 30, H - 70, 120, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 }
 

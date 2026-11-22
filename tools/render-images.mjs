@@ -19,18 +19,18 @@ await page.evaluate(async () => {
   };
   const slides = buildSlides(demo, { origin: location.origin });
   document.head.innerHTML = '<link rel="stylesheet" href="/app.css">';
-  document.body.innerHTML = `<div style="width:1200px;height:630px;background:#fff8ef;display:flex;align-items:center;gap:40px;padding:0 60px;box-sizing:border-box;overflow:hidden">
-    <div style="flex:0 0 560px"><div class="brand" style="font-size:2rem;margin-bottom:26px"><span data-logo style="width:54px;height:54px"></span>Crewcap</div>
-    <div style="font:850 58px/1.05 system-ui;letter-spacing:-.03em;color:#16122b">Your group’s year,<br>voted by <span class="hl">your group.</span></div>
+  document.body.innerHTML = `<div style="width:1200px;height:630px;background:#fff8ef;display:flex;align-items:center;gap:36px;padding:0 48px;box-sizing:border-box;overflow:hidden">
+    <div style="flex:0 0 550px"><div class="brand" style="font-size:2rem;margin-bottom:26px"><span data-logo style="width:54px;height:54px"></span>Crewcap</div>
+    <div style="font:850 50px/1.08 system-ui;letter-spacing:-.03em;color:#16122b">Your group’s year,<br>voted by <span class="hl">your&nbsp;group.</span></div>
     <div style="font:600 26px system-ui;color:#3b3557;margin-top:22px">One link · everyone votes · the story drops for all of you</div></div>
-    <div id="cards" style="display:flex;gap:16px;align-items:center"></div></div>`;
+    <div id="cards" style="display:flex;gap:12px;align-items:center;flex:0 0 auto"></div></div>`;
   const { LOGO } = await import('/common.js');
   document.querySelector('[data-logo]').innerHTML = LOGO;
   document.querySelector('[data-logo] svg').style.cssText = 'width:54px;height:54px';
   [2, 1, 3].forEach((i, n) => {
     const c = document.createElement('canvas');
     renderSlide(slides[i], c);
-    c.style.cssText = `width:${n === 1 ? 210 : 180}px;height:auto;border-radius:16px;box-shadow:0 20px 40px -20px rgba(22,18,43,.6);transform:rotate(${[-4, 0, 4][n]}deg)`;
+    c.style.cssText = `width:${n === 1 ? 190 : 160}px;height:auto;border-radius:16px;box-shadow:0 20px 40px -20px rgba(22,18,43,.6);transform:rotate(${[-4, 0, 4][n]}deg)`;
     document.getElementById('cards').append(c);
   });
   await document.fonts.ready;

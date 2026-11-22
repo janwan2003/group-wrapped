@@ -21,9 +21,13 @@ function drawKinds() {
   title.dispatchEvent(new Event('input'));
   drawAwards();
 }
+// The first 8 awards (and any picked) show by default; the rest sit behind "Show more" to keep the form short on phones.
+const FIRST = 8;
+let allAwards = false;
 function drawAwards() {
   $('#awards').innerHTML = '';
-  for (const a of AWARDS) {
+  AWARDS.forEach((a, i) => {
+    if (!allAwards && i >= FIRST && !picked.has(a.key)) return;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip violet';
@@ -32,7 +36,10 @@ function drawAwards() {
     b.innerHTML = `<span aria-hidden="true">${a.emoji}</span><span></span>`;
     b.lastChild.textContent = awardLabel(a, kind);
     $('#awards').append(b);
-  }
+  });
+  const hidden = AWARDS.length - $('#awards').children.length;
+  $('#aw-more').hidden = hidden === 0;
+  $('#aw-more').textContent = `Show ${hidden} more awards`;
   $('#aw-count').textContent = `(${picked.size} picked, 3 to 10)`;
 }
 $('#kinds').addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (b) { kind = b.dataset.kind; drawKinds(); } });
@@ -44,6 +51,7 @@ $('#awards').addEventListener('click', (e) => {
   else if (picked.size >= 10) { toast('Up to 10 awards. Untick one first.'); return; } else picked.add(k);
   drawAwards();
 });
+$('#aw-more').addEventListener('click', () => { allAwards = true; drawAwards(); });
 $('#drop').addEventListener('click', (e) => {
   const b = e.target.closest('[data-drop]');
   if (!b) return;

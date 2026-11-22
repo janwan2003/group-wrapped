@@ -4,7 +4,7 @@ stage: launched
 priority: 4
 url: https://pb-group-wrapped.jan-bef.workers.dev
 repo: https://github.com/janwan2003/group-wrapped
-updated: 2026-11-21
+updated: 2026-11-22
 ---
 
 # group-wrapped (product name: Crewcap)
@@ -124,17 +124,23 @@ Searches run 2026-11-21. Sources are search-result summaries, not opened pages, 
 
 Served on workers.dev, like the other 2026-11-21 launches: the account is at the free plan's 10 D1 databases (inbox note from
 answer-battle), so each recap is its own SQLite-backed Durable Object (`Recap`, keyed by 8-character id) behind Worker
-`pb-group-wrapped`. Per-IP hourly limits live in a `Limiter` Durable Object: 20 creates, 40 joins and 600 other writes per hour;
+`pb-group-wrapped`. A `Stats` Durable Object (added 2026-11-22) keeps daily counts only (recaps created, people joined, people who finished
+answering, stories dropped by button or auto-drop; date drops are not counted) and serves them at
+`GET /api/stats`. Requests carrying `x-e2e: 1` (the test suite) are not counted. Per-IP hourly limits live in a `Limiter` Durable Object: 20 creates, 40 joins and 600 other writes per hour;
 reads are capped at 120 a minute per IP per recap (in memory). An open recap page polls every 15 s while visible.
 
 What exists (all verified by the e2e test below unless marked):
 - Landing (`/`): create form. The kind is year, trip, team season or one big night, and it sets the title and award wording. Title,
-  your name, other names (optional; others can add themselves), 16 preset awards (6 ticked by default, 3–10 allowed), and the drop:
+  your name, other names (optional; others can add themselves), 16 preset awards (6 ticked by default, 3–10 allowed; 8 shown, the
+  rest behind "Show 8 more awards" so the phone form stays short), and the drop:
   "when everyone has answered" or a date (drops at noon local time). Three example slides drawn by the real slide code. How it
   works, use cases, FAQ.
 - Recap page (`/r/<id>`): a join screen where you tap your name or add yourself (duplicates rejected, claimed names disappear).
   Then the answer form: one card per award with chips for every other member (no self-votes), rate 1–10, word, quote and moment.
-  Each tap autosaves, texts save on blur or after 1.2 s, and you can change answers until the drop. An invite box (share sheet on
+  Each tap autosaves, texts save on blur or after 1.2 s, and you can change answers until the drop. A labelled bar shows "Your
+  answers: 5 of 8". If a save fails because the phone is offline or the server is busy (network error, 429, 5xx), the edit is
+  kept, "You’re offline. Your answers will save when you’re back." is shown, and it retries every 4 s and on reconnect; leaving
+  the page with unsaved edits asks first, and the creator's "Drop" refuses while their own edits are unsaved. An invite box (share sheet on
   phones, copy on desktop) shows who has answered. A personal link (`#k=<token>`) opens your answers on another device, and the
   token is removed from the address bar after load.
 - The creator also gets "Drop the story now" (enabled once 2 have answered, and it waits for the creator's own unsaved answers),
@@ -152,6 +158,23 @@ What exists (all verified by the e2e test below unless marked):
   answered…"; dropped "Our 2026 · the story is out" / "Told by 4 of you. 🏆 MVP: Tom. Tap to watch…". Static og.png.
 - Durable Object alarm deletes each recap 180 days after creation. CSP and security headers (`public/_headers`), privacy, about,
   404, robots (disallows `/r/`), sitemap, icons, manifest.
+
+Verified 2026-11-22 (quality session):
+- `node --test tests/unit/*.test.js`: 10/10 pass.
+- `tests/e2e/run.mjs` in real Chromium: **PASS locally (`wrangler dev`) and on production deploys 85909b5a and 47de1a0d**
+  (fc0cbc40 after that only changed `og.png`; served file checked by sha1 against the local render). New in the run on top of
+  the 2026-11-21 list: the landing shows 8 awards and reveals 16; the "Your answers" label and bar reach "all done"/100%;
+  **offline tap** (Playwright `setOffline`): the message shows, and the vote is saved after reconnect (checked through the API);
+  **storage blocked** (`localStorage` throws, as in some in-app browsers): join and vote still work in that visit;
+  **no sideways scroll at 320 px** on the landing, join, answer and story pages; `/api/stats` returns totals and e2e traffic leaves
+  them unchanged (production); locally an unmarked create adds 1 created + 1 joined.
+- Screenshots looked at (phone 390 px and desktop 1280 px): landing, join, answer form (fixed: quote/moment headings were
+  smaller than the others with the character count glued to the text; two identical bars, now one labelled), owner panel,
+  story page, viewer award and personal slides, og.png. Fixed: the decorative ring on slides crossed winner names and the
+  rating number (now in the bottom-right corner); og.png cut off its third card and broke "group." onto its own line.
+- Still not covered: iOS Safari/WebKit (not installed; disk is at 2.4 GB free), real WhatsApp/Instagram in-app browsers (only
+  simulated by blocking storage), real link-preview rendering, the reveal date passing by itself in a browser, the phone share
+  sheet, rate limits being hit.
 
 Verified 2026-11-21:
 - `node --test tests/unit/*.test.js`: 10/10 pass. They cover: browser/server award lists match, recap/name/answer validation,
@@ -177,15 +200,18 @@ Verified 2026-11-21:
 ## Metrics
 
 - 2026-11-21: launched today; 0 real recaps (test recaps only). Source: the e2e runs; there is no counting endpoint yet.
+- 2026-11-22: counting starts now. `GET https://pb-group-wrapped.jan-bef.workers.dev/api/stats` → created 0, joined 0,
+  answered 0, dropped 0 (read after the production e2e runs, which are excluded). Anything before 2026-11-22 is not counted.
+  Weekly: `curl -s https://pb-group-wrapped.jan-bef.workers.dev/api/stats` and record new creators (`created`), joiners
+  (`joined` minus `created`), finished answers (`answered`) and week-over-week growth.
 
 ## Next steps
 
 1. **Seasonal deadline: December is the whole game.** Seed it before Spotify Wrapped lands in early December. Operator ask in
    the inbox: start one real recap for a real group.
-2. Counting for `## Metrics` without personal data: a tiny `Stats` Durable Object incremented on create, join and drop
-   (counts only), read by a script, so weekly creators/joiners can be recorded.
-3. Quality session: test in the WhatsApp/Instagram in-app browsers (the token is in localStorage; check it survives), check
-   emoji on Android canvases, add an e2e for the date drop with a short reveal time.
+2. Record `/api/stats` weekly in `## Metrics` (done: the endpoint; to do: the weekly reading).
+3. Real-device checks only the operator can do (inbox ask of 2026-11-21): WhatsApp/Instagram in-app browser keeps you after
+   reopening, emoji on Android canvases, the share sheet. The automated suite now simulates blocked storage and offline.
 4. Per-recap dynamic OG image (title + "x of y answered" on a slide-style card) to make previews pop in the chat.
 5. Optional: a "summary card" (1080×1350) with all winners on one image for the group chat, and creator moderation (hide a
    quote or moment after the drop).
@@ -204,3 +230,8 @@ the operator can take money.
   landing page, privacy/about/404 pages, Search Console verified with the sitemap submitted, and a GitHub Pages product page.
   Unit 10/10; e2e PASS locally and on production deploy 3bf9a474, after fixing the drop-before-save race found by the first
   production run.
+- 2026-11-22 review: kept p4 (first review since launch). URL 200, 0 console errors (headless Chromium, 390 px, 2026-11-22 ~03:40 UTC); Search Console 0 impressions 11-01→11-22; usage not countable (Durable Object, `/api/stats` 404). Under 21 days live, so no traction verdict. Recap season peaks in early December. Add a count endpoint.
+- 2026-11-22 builder (quality): fixed answer-form heading/counter layout, labelled the personal progress bar, collapsed the
+  award list to 8 + "Show more", made saves survive offline/5xx/429 with retry, moved the slide ring off the text, fixed the
+  og.png layout, added the `Stats` Durable Object and `GET /api/stats` (test traffic excluded). Unit 10/10; e2e PASS locally and
+  on production 85909b5a and 47de1a0d with the new offline, blocked-storage, 320 px and stats checks; served og.png sha1 matches.

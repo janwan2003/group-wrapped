@@ -7,7 +7,8 @@ including one about each person. No app, no account.
 
 Live: https://pb-group-wrapped.jan-bef.workers.dev · Product page: https://janwan2003.github.io/group-wrapped/
 
-- `src/` Cloudflare Worker + Durable Objects (one SQLite-backed object per recap, per-IP rate limits)
+- `src/` Cloudflare Worker + Durable Objects (one SQLite-backed object per recap, per-IP rate limits, daily usage counts at
+  `GET /api/stats`, counts only)
 - `public/` the site; `public/slides.js` draws the story slides on a canvas
 - `tests/unit` (`node --test tests/unit/*.test.js`), `tests/e2e/run.mjs` (Playwright, real Chromium)
 - `docs/` GitHub Pages product, privacy and support page
